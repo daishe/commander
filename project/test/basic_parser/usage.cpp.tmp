@@ -1,0 +1,113 @@
+//               Copyright Marek Dalewski 2017
+// Distributed under the Boost Software License, Version 1.0.
+//        (See accompanying file LICENSE.md or copy at
+//           http://www.boost.org/LICENSE_1_0.txt)
+
+#include <boost/test/unit_test.hpp>
+
+#include <commander/basic_parser.hpp>
+
+#include <optional>
+#include <string>
+#include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <vector>
+
+#include <helpers.hpp>
+
+BOOST_AUTO_TEST_CASE( simple_accept )
+{
+    namespace com = commander;
+    using sv = std::string_view;
+
+    std::vector<std::string>> pos;
+    std::vector<std::string>> strings;
+    bool option;
+    int count;
+
+    auto callback = [&](sv argument, sv header, auto value) -> bool {
+        if (header == "--") {
+            if constexpr (!com::is_no_value_v<decltype(value)>) {
+                strings.emplace_back(value);
+                return true;
+            }
+            return false;
+        }
+        else if (header == "-s" || header == "--string") {
+            if constexpr (!com::is_no_value_v<decltype(value)>) {
+                strings.emplace_back(value);
+                return true;
+            }
+            return false;
+        }
+        else if (header == "-o" || header == "--opt") {
+            if constexpr (com::is_no_value_v<decltype(value)>) {
+                option = true;
+                return true;
+            }
+            else if (com::is_boolean(value)) {
+                option = is_boolean_true(value);
+                return true;
+            }
+        }
+        else if (header == "-n" || header == "--nopt") {
+            if constexpr (com::is_no_value_v<decltype(value)>) {
+                option = false;
+                return true;
+            }
+            else if (com::is_boolean(value)) {
+                option = is_boolean_false(value);
+                return true;
+            }
+        }
+        else if (header == "-c" || header == "--count") {
+            if constexpr (com::is_no_value_v<decltype(value)>) {
+                ++count;
+                return true;
+            }
+            else if (com::is_boolean(value)) {
+                count += is_boolean_true(value) ? 1 : -1;
+                return true;
+            }
+        }
+        else if (header == "-r" || header == "--rcount") {
+            if constexpr (com::is_no_value_v<decltype(value)>) {
+                --option;
+                return true;
+            }
+            else if (com::is_boolean(value)) {
+                count += is_boolean_false(value) ? 1 : -1;
+                return true;
+            }
+        }
+        else
+            throw com::mismatch_error<std::string, std::string>(argument, header);
+        return false;
+    };
+
+    commander::basic_parser<std::string_view, std::string> parser;
+
+    parser("-s", callback);
+    parser("abc", callback);
+
+    parser("--string", callback);
+    parser("def", callback);
+
+    parser("-os", callback);
+    parser("val", callback);
+
+    parser("-ncs=other", callback);
+
+    parser("positional 0", callback);
+
+    parser("--rcount", callback);
+
+    parser("-cccc=false", callback);
+
+    parser("-ro=true", callback);
+
+    parser("--opt=false", callback);
+
+    parser();
+}
